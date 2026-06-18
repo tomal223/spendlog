@@ -1,0 +1,11 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "SpendLog",
+      "runtimeExecutable": "npx",
+      "runtimeArgs": ["serve", "-p", "3900", "."],
+      "port": 3900
+    }
+  ]
+}

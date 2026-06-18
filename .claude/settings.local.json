@@ -1,0 +1,14 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(mkdir -p /Users/tawzibahmedtomal/Desktop/ExpenseTracker/.claude)",
+      "mcp__Claude_Preview__preview_start",
+      "Bash(gh auth *)",
+      "Bash(npm --version)",
+      "Bash(npm install *)",
+      "Bash(git init *)",
+      "Bash(git add *)",
+      "Bash(git commit -m ' *)"
+    ]
+  }
+}
