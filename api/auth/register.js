@@ -1,5 +1,5 @@
 import bcrypt from 'bcryptjs';
-import { getDb, setupSchema } from '../_db.js';
+import { query, setupSchema } from '../_db.js';
 import { signToken, cors, json } from '../_auth.js';
 
 export default async function handler(req, res) {
@@ -13,16 +13,15 @@ export default async function handler(req, res) {
 
   try {
     await setupSchema();
-    const sql = getDb();
     const hash = await bcrypt.hash(password, 10);
-    const rows = await sql`
-      INSERT INTO users (email, password_hash) VALUES (${email.toLowerCase().trim()}, ${hash})
-      RETURNING id, email
-    `;
+    const rows = await query(
+      'INSERT INTO users (email, password_hash) VALUES ($1, $2) RETURNING id, email',
+      [email.toLowerCase().trim(), hash]
+    );
     const user = rows[0];
     json(res, 201, { token: signToken(user.id), email: user.email });
   } catch (err) {
-    if (err.message?.includes('unique')) return json(res, 409, { error: 'Email already registered' });
+    if (err.code === '23505') return json(res, 409, { error: 'Email already registered' });
     console.error(err);
     json(res, 500, { error: 'Server error' });
   }

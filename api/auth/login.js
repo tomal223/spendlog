@@ -1,5 +1,5 @@
 import bcrypt from 'bcryptjs';
-import { getDb, setupSchema } from '../_db.js';
+import { query, setupSchema } from '../_db.js';
 import { signToken, cors, json } from '../_auth.js';
 
 export default async function handler(req, res) {
@@ -12,8 +12,10 @@ export default async function handler(req, res) {
 
   try {
     await setupSchema();
-    const sql = getDb();
-    const rows = await sql`SELECT * FROM users WHERE email = ${email.toLowerCase().trim()}`;
+    const rows = await query(
+      'SELECT * FROM users WHERE email = $1',
+      [email.toLowerCase().trim()]
+    );
     const user = rows[0];
     if (!user) return json(res, 401, { error: 'Invalid email or password' });
 

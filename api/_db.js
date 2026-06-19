@@ -1,22 +1,34 @@
-import { neon } from '@neondatabase/serverless';
+import pkg from 'pg';
+const { Pool } = pkg;
 
-let _sql;
-export function getDb() {
-  if (!_sql) _sql = neon(process.env.DATABASE_URL);
-  return _sql;
+let _pool;
+function getPool() {
+  if (!_pool) {
+    _pool = new Pool({
+      connectionString: process.env.DATABASE_URL,
+      ssl: { rejectUnauthorized: false },
+      max: 1, // keep connections low in serverless
+    });
+  }
+  return _pool;
+}
+
+export async function query(text, params) {
+  const pool = getPool();
+  const { rows } = await pool.query(text, params);
+  return rows;
 }
 
 export async function setupSchema() {
-  const sql = getDb();
-  await sql`
+  await query(`
     CREATE TABLE IF NOT EXISTS users (
-      id        SERIAL PRIMARY KEY,
-      email     TEXT UNIQUE NOT NULL,
+      id            SERIAL PRIMARY KEY,
+      email         TEXT UNIQUE NOT NULL,
       password_hash TEXT NOT NULL,
-      created_at TIMESTAMPTZ DEFAULT NOW()
+      created_at    TIMESTAMPTZ DEFAULT NOW()
     )
-  `;
-  await sql`
+  `);
+  await query(`
     CREATE TABLE IF NOT EXISTS expenses (
       id         TEXT PRIMARY KEY,
       user_id    INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
@@ -26,6 +38,8 @@ export async function setupSchema() {
       date       DATE NOT NULL,
       created_at TIMESTAMPTZ DEFAULT NOW()
     )
-  `;
-  await sql`CREATE INDEX IF NOT EXISTS expenses_user_date ON expenses(user_id, date DESC)`;
+  `);
+  await query(`
+    CREATE INDEX IF NOT EXISTS expenses_user_date ON expenses(user_id, date DESC)
+  `);
 }

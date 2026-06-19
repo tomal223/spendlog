@@ -1,4 +1,4 @@
-import { getDb } from '../_db.js';
+import { query } from '../_db.js';
 import { verifyToken, cors, json } from '../_auth.js';
 
 export default async function handler(req, res) {
@@ -10,7 +10,6 @@ export default async function handler(req, res) {
   if (!userId) return json(res, 401, { error: 'Unauthorized' });
 
   const { id } = req.query;
-  const sql = getDb();
-  await sql`DELETE FROM expenses WHERE id = ${id} AND user_id = ${userId}`;
+  await query('DELETE FROM expenses WHERE id = $1 AND user_id = $2', [id, userId]);
   json(res, 200, { ok: true });
 }
