@@ -6,7 +6,10 @@ function getPool() {
   if (!_pool) {
     // Strip sslmode from URL — pg v8 treats sslmode=require as verify-full,
     // rejecting Supabase's cert. We handle SSL via the ssl option instead.
-    const connStr = (process.env.DATABASE_URL || '').replace(/[?&]sslmode=[^&]*/g, '').replace(/\?$/, '');
+    const connStr = (process.env.DATABASE_URL || '')
+      .replace(/[?&]sslmode=[^&]*/g, '')
+      .replace(/[?&]channel_binding=[^&]*/g, '')
+      .replace(/\?&/, '?').replace(/&&/g, '&').replace(/[?&]$/, '');
     _pool = new Pool({
       connectionString: connStr,
       ssl: { rejectUnauthorized: false },
