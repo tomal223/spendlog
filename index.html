@@ -89,7 +89,8 @@
   .date-group-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; }
   .date-label { font-size: 13px; font-weight: 600; color: var(--text-secondary); }
   .date-total { font-size: 13px; font-weight: 600; color: var(--text-secondary); }
-  .expense-card { background: var(--surface); border-radius: 14px; padding: 14px 16px; display: flex; align-items: center; gap: 12px; margin-bottom: 8px; border: 1px solid var(--border); position: relative; overflow: hidden; }
+  .expense-card { background: var(--surface); border-radius: 14px; padding: 14px 16px; display: flex; align-items: center; gap: 12px; margin-bottom: 8px; border: 1px solid var(--border); position: relative; overflow: hidden; cursor: pointer; transition: border-color 0.15s, background 0.15s; }
+  .expense-card:active { background: var(--surface2); border-color: rgba(245,166,35,0.2); }
   .cat-icon { width: 42px; height: 42px; border-radius: 12px; background: var(--surface2); display: flex; align-items: center; justify-content: center; font-size: 20px; flex-shrink: 0; }
   .expense-info { flex: 1; min-width: 0; }
   .expense-cat { font-size: 14px; font-weight: 600; }
@@ -280,7 +281,7 @@
 <div id="sheet-overlay" onclick="closeSheet()"></div>
 <div id="add-sheet" role="dialog" aria-modal="true">
   <div class="sheet-handle"></div>
-  <div class="sheet-title">Add Expense</div>
+  <div class="sheet-title" id="sheet-title">Add Expense</div>
   <div class="form-group">
     <label class="form-label">Amount</label>
     <div class="amount-input-wrap">
@@ -340,6 +341,7 @@ let reportDate = new Date();
 let selectedCat = 'food';
 let authMode = 'login';
 let syncTimeout = null;
+let editingId = null; // null = add mode, string = edit mode
 
 // ── API BASE ──
 const API = (typeof location !== 'undefined' && location.hostname !== 'localhost')
@@ -405,7 +407,7 @@ async function submitAuth(e) {
 function bootApp() {
   document.getElementById('view-auth').style.display = 'none';
   document.getElementById('bottom-nav').classList.remove('hidden');
-  document.querySelectorAll('.view').forEach(v => v.style.display = '');
+  document.getElementById('view-home').classList.add('active');
   loadLocal();
   renderHome();
   syncFromServer();
@@ -534,17 +536,21 @@ function buildCatGrid() {
 }
 
 // ── SHEET ──
-function openSheet() {
-  document.getElementById('inp-amount').value = '';
-  document.getElementById('inp-note').value = '';
-  document.getElementById('inp-date').value = todayStr();
-  selectedCat = 'food';
+function openSheet(expense = null) {
+  editingId = expense ? expense.id : null;
+  document.getElementById('sheet-title').textContent = expense ? 'Edit Expense' : 'Add Expense';
+  document.getElementById('submit-btn').textContent = expense ? 'Save Changes' : 'Save Expense';
+  document.getElementById('inp-amount').value = expense ? expense.amount : '';
+  document.getElementById('inp-note').value = expense ? expense.note : '';
+  document.getElementById('inp-date').value = expense ? expense.date : todayStr();
+  selectedCat = expense ? expense.category : 'food';
   buildCatGrid();
   document.getElementById('sheet-overlay').classList.add('open');
   document.getElementById('add-sheet').classList.add('open');
   setTimeout(() => document.getElementById('inp-amount').focus(), 400);
 }
 function closeSheet() {
+  editingId = null;
   document.getElementById('sheet-overlay').classList.remove('open');
   document.getElementById('add-sheet').classList.remove('open');
 }
@@ -560,22 +566,44 @@ async function saveExpense() {
   }
   const note = document.getElementById('inp-note').value.trim();
   const date = document.getElementById('inp-date').value || todayStr();
-  const expense = { id: uuid(), amount: amtRaw, category: selectedCat, note, date };
-
-  expenses.unshift(expense);
-  saveLocal();
 
   const btn = document.getElementById('submit-btn');
   btn.textContent = '✓ Saved!';
   btn.classList.add('success');
-  setTimeout(() => { btn.textContent = 'Save Expense'; btn.classList.remove('success'); closeSheet(); }, 800);
+  setTimeout(() => { btn.textContent = editingId ? 'Save Changes' : 'Save Expense'; btn.classList.remove('success'); closeSheet(); }, 800);
 
-  showToast('Expense saved!');
-  renderHome();
-  renderReport();
+  if (editingId) {
+    // Edit existing
+    const idx = expenses.findIndex(e => e.id === editingId);
+    if (idx !== -1) {
+      expenses[idx] = { ...expenses[idx], amount: amtRaw, category: selectedCat, note, date };
+    }
+    saveLocal();
+    showToast('Expense updated!');
+    renderHome();
+    renderReport();
+    updateExpenseRemote(editingId, { amount: amtRaw, category: selectedCat, note, date });
+  } else {
+    // Add new
+    const expense = { id: uuid(), amount: amtRaw, category: selectedCat, note, date };
+    expenses.unshift(expense);
+    saveLocal();
+    showToast('Expense saved!');
+    renderHome();
+    renderReport();
+    pushExpense(expense);
+  }
+}
 
-  // Push to server in background
-  pushExpense(expense);
+async function updateExpenseRemote(id, fields) {
+  if (!isLoggedIn()) return;
+  try {
+    await fetch(`${API}/expenses/${id}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${getToken()}` },
+      body: JSON.stringify(fields)
+    });
+  } catch { /* offline, local already updated */ }
 }
 
 // ── HOME RENDER ──
@@ -623,15 +651,24 @@ function renderHome() {
       const cat = CAT_MAP[e.category] || CAT_MAP.other;
       const card = document.createElement('div');
       card.className = 'expense-card';
+      card.setAttribute('aria-label', `Edit ${cat.label} expense`);
       card.innerHTML = `<div class="cat-icon">${cat.icon}</div>
         <div class="expense-info">
           <div class="expense-cat">${cat.label}</div>
-          ${e.note?`<div class="expense-note">${escHtml(e.note)}</div>`:''}
+          ${e.note?`<div class="expense-note">${escHtml(e.note)}</div>`:'<div class="expense-note" style="color:var(--text-dim);font-style:italic">Tap to edit</div>'}
         </div>
         <div class="expense-right">
           <div class="expense-amount">${fmtBDT(e.amount)}</div>
-          <button class="delete-btn" onclick="deleteExpense('${e.id}')" aria-label="Delete">✕</button>
+          <button class="delete-btn" data-id="${e.id}" aria-label="Delete">✕</button>
         </div>`;
+      // Tap card body → edit; tap delete btn → delete
+      card.addEventListener('click', ev => {
+        if (ev.target.closest('.delete-btn')) {
+          deleteExpense(e.id);
+        } else {
+          openSheet(e);
+        }
+      });
       group.appendChild(card);
     });
     list.appendChild(group);
